@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "client-app-awx.fullname" . }}
+  labels:
+    {{- .Values.service.selector | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "client-app-awx.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "client-app-awx.selectorLabels" . | nindent 8 }}
+    spec:
+      initContainers:
+        - name: init-myservice
+          image: busybox
+          command: "{{ .Values.command }}"
+          volumeMounts:
+            - name: {{ .Values.volumes.sshkeyvolume.name }}
+              mountPath: /secret
+              readOnly: true
+            - name: {{ .Values.volumes.emptydir.name }}
+              mountPath: /config/.ssh/
+      containers:
+        {{- range .Values.image.name }}
+        - name: {{ include "Values.name" . }}
+        {{- end }}
+        {{- range .Values.image }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        {{- end }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          volumeMounts:
+            - name: {{ .Values.volumes.sshkeyvolume.name }}
+              mountPath: /config/.ssh
+    volumes:
+      - name: sshkeyvolume
+        secret:
+          secretName: awx-ssh-authorized-key
+          items:
+          - key: {{ .Values.volumes.sshkeyvolume.items.key }}
+            path: {{ .Values.volumes.sshkeyvolume.items.path }}
+            mode: 0600
+      - name: {{ .Values.volumes.emptydir.name }}
+        emptyDir: {{ .Values.volumes.emptydir.emptyDir }}
