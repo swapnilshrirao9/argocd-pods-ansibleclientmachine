@@ -1,15 +1,16 @@
+{{- range $index, $name := .Values.service.metadata.name }}
 apiVersion: v1
 kind: Service
 metadata:
-  {{- range .Values.service.metadata }}
-  name: {{ .name }}
-  {{- end }}
+  name: {{ $name }}
 spec:
   ports:
-  - port: "{{ .Values.service.port }}"
-    targetPort: "{{ .Values.service.targetPort }}"
+    - port: {{ $.Values.service.port }}
+      targetPort: {{ $.Values.service.targetPort }}
   selector:
-   {{- range .Values.service.selector }}
-    app: {{ .Values.service.selector.app }}
-    instance: {{ .Values.service.selector.instance }}
-   {{- end }}
+    app: {{ $.Values.service.selector.app }}
+    # यह ऑटोमैटिकली इंडेक्स के आधार पर सही इंस्टेंस (alpha, gamma, beta) को चुनेगा
+    instance: {{ index $.Values.image.name $index }}
+---
+{{- end }}
+

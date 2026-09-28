@@ -1,48 +1,74 @@
+{{- range .Values.image.name }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "client-app-awx.fullname" . }}
+  # हर डिप्लॉयमेंट का नाम अलग होगा (जैसे: release-ssh-pod-alpha)
+  name: {{ $.Release.Name }}-{{ . }}
   labels:
-    {{- .Values.service.selector | nindent 4 }}
+    app: {{ $.Values.service.selector.app }}
+    instance: {{ . }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ $.Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "client-app-awx.selectorLabels" . | nindent 6 }}
+      app: {{ $.Values.service.selector.app }}
+      instance: {{ . }}
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config_map.yaml") . | sha256sum }} 
       labels:
-        {{- include "client-app-awx.selectorLabels" . | nindent 8 }}
+        app: {{ $.Values.service.selector.app }}
+        instance: {{ . }}
     spec:
       initContainers:
         - name: init-myservice
           image: busybox
-          command: "{{ .Values.command }}"
+          envFrom:
+            - configMapRef:
+                name: common-pod-config
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "=== Preparing SSH home directory ==="
+              mkdir -p /config/.ssh
+              chown 1000:1000 /config/.ssh
+              chmod 755 /config/.ssh
+              cp /secret/authorized_keys /config/.ssh/authorized_keys
+              chown 1000:1000 /config/.ssh
+              chmod 700 /config/.ssh
+              chown 1000:1000 /config/.ssh/authorized_keys
+              chmod 600 /config/.ssh/authorized_keys
+              echo "=== SSH authorized_keys installed ==="
           volumeMounts:
-            - name: {{ .Values.volumes.sshkeyvolume.name }}
+            - name: {{ $.Values.volumes.sshkeyvolume.name }}
               mountPath: /secret
               readOnly: true
-            - name: {{ .Values.volumes.emptydir.name }}
+            - name: {{ $.Values.volumes.emptydir.name }}
               mountPath: /config/.ssh/
       containers:
-        {{- range .Values.image.name }}
-        - name: {{ include "Values.name" . }}
-        {{- end }}
-        {{- range .Values.image }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-        {{- end }}
+        - name: {{ . }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          envFrom:
+            - configMapRef:
+                name: common-pod-config
           ports:
-            - containerPort: {{ .Values.service.port }}
+            - containerPort: {{ $.Values.service.targetPort }}
           volumeMounts:
-            - name: {{ .Values.volumes.sshkeyvolume.name }}
+            - name: {{ $.Values.volumes.emptydir.name }}
               mountPath: /config/.ssh
-    volumes:
-      - name: sshkeyvolume
-        secret:
-          secretName: awx-ssh-authorized-key
-          items:
-          - key: {{ .Values.volumes.sshkeyvolume.items.key }}
-            path: {{ .Values.volumes.sshkeyvolume.items.path }}
-            mode: 0600
-      - name: {{ .Values.volumes.emptydir.name }}
-        emptyDir: {{ .Values.volumes.emptydir.emptyDir }}
+      volumes:
+        - name: {{ $.Values.volumes.sshkeyvolume.name }}
+          secret:
+            secretName: {{ $.Values.volumes.sshkeyvolume.secretName }}
+            items:
+              - key: {{ (index $.Values.volumes.sshkeyvolume.items 0).key }}
+                path: {{ (index $.Values.volumes.sshkeyvolume.items 0).path }}
+                mode: 0600
+        - name: {{ $.Values.volumes.emptydir.name }}
+          emptyDir: {}
+---
+{{- end }}
+

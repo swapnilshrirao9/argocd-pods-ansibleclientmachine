@@ -1,0 +1,54 @@
+image:
+  name:
+    - ssh-pod-alpha
+    - ssh-pod-gamma
+    - ssh-pod-beta
+  repository: linuxserver/openssh-server
+  tag: latest
+
+volumes:
+  sshkeyvolume:
+    name: ssh-key-volume
+    secretName: awx-ssh-authorized-key
+    items:
+      - key: authorized_keys
+        path: authorized_keys
+  emptydir:
+    name: linuxserver-home
+    emptyDir: {}
+
+replicaCount: 1
+
+command:
+  - sh
+  - -c
+  - |
+    set -e
+    echo "=== Preparing SSH home directory ==="
+    mkdir -p /config/.ssh
+    chown 1000:1000 /config/.ssh
+    chmod 755 /config/.ssh
+    cp /secret/authorized_keys /config/.ssh/authorized_keys
+    chown 1000:1000 /config/.ssh
+    chmod 700 /config/.ssh
+    chown 1000:1000 /config/.ssh/authorized_keys
+    chmod 600 /config/.ssh/authorized_keys
+    echo "=== SSH authorized_keys installed ==="
+    ls -ld /config/
+    ls -ld /config/.ssh
+    ls -l /config/.ssh/authorized_keys
+
+service:
+  metadata:
+    name: 
+    - ssh-service-alpha
+    - ssh-service-gamma
+    - ssh-service-beta
+  port: 22
+  targetPort: 2222
+  selector:
+    app: ssh-server
+    instance:
+    - alpha
+    - gamma
+    - beta
